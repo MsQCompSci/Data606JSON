@@ -1,0 +1,137 @@
+---
+title: "NY Times API Shiny App"
+author: "Layla Quinones"
+date: "3/23/2020"
+output: rmdformats::readthedown
+---
+
+```{r, warning = FALSE, echo = FALSE, include = FALSE}
+library(jsonlite)
+library(tidyverse)
+library(kableExtra)
+#Load Packages for shiny app
+library(shiny)
+library(DT)
+#API KEY
+KEY <- "oZ6c0FgayC1zkrhn3lGBM0s07BXlL9e4"
+```
+
+>Note: jsonlite, tidyverse, kabelExtra, shiny,and DT libraries used.
+
+# Creating a Program that accesses New York Times Articles 
+
+When I first started this project and read the assigment I thought that I would need to create a user interface for people to use the New York Times API to search for articles. With the user in mind, I decided that my programshould return a list of articles in a dataframe with abstracts and links so that people can see a breif summary of the article and use the link to read the article if they are intersted. The steps I took in developing this program is as follows:
+
+- Select a keyword to give the api to return results: I chose **corona virus**
+
+- Select a start date and end date to narrow your search: I chose between **March 23, 2019** and **March 23, 2020**
+
+- Identify your API key by registering for one at [NYTimes API Website](https://developer.nytimes.com/apis)
+
+- Use the above variables to construct the url for the api call and `paste0()` to concatinate all variables into one string 
+
+- Query the API using `fromJSON()` and piping the resulting object into a dataframe using `data.frame()`.
+
+- To help tidy the data frame for specifc components that I thought were helpful, I also selected only the columns with an abstract and a url - so that people who are using this code can quickly judge if they want to read a particular article.
+
+```{r}
+#Select keyword
+keyword <- "corona+virus" # Need to use + to string together separate words
+
+#Time fram e: within the last year
+beginDate <- "20190323"
+endDate <- "20200323"
+
+#API Key HIDDEN
+#KEY <- "######"
+
+#Construct url
+url <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",keyword,"&begin_date=",beginDate,"&end_date=",endDate,"&facet_filter=true&api-key=",KEY, sep="")
+
+#Query the API 
+initialQuery <- fromJSON(url, flatten = T) %>%data.frame()
+
+#Descriptions and links only
+desLink <- initialQuery %>% 
+  select(response.docs.abstract, response.docs.web_url) %>%
+  rename("Abstract" = response.docs.abstract, "Link"= response.docs.web_url)
+
+#Entire dataframe
+kable(initialQuery) %>%
+  kable_styling() %>%
+  scroll_box(width = "100%", height = "200px")
+
+#Links and abstracts
+kable(desLink) %>%
+  kable_styling() %>%
+  scroll_box(width = "100%", height = "200px")
+
+```
+
+# Shiny App for User Interface
+
+## [Click to Launch Shiny App](https://msqcsnyc.shinyapps.io/NYTAPI/)
+
+Now that we see how simple it is to adjust a specific query for the New York Times Article API, we are ready to start thinking about the user's experience using our tool. I decided that the user would need an interface where they can enter a keyword or a date and get results back in the form of a data table. The best tool in R for user interfaces that I know of is ShinyApps using the `shiny` library. The steps to converting the code above into a ShinyApp were as follows:
+
+- Identify API Key and place in a variable
+
+- Create a function that will run the program shown above (note: a keyword is **NOT** identified because that is something we would like the user to do.) A simpler url to call on the json was used ( dates omitted). This function returns a dataframe that matches the keyword input.
+
+- Define the user interface function with a text input and a button that takes in a user's keyword on the left panel,and displays the dataframe that results in the right panel.
+
+- In the shiny app server define a reactve function that takes in the user keyword when the button is pressed and calls the first function on the user keyword. The dataframe that results is rended in a table as an output for the shiny app
+
+- Finally, `shinyApp` is called to build the application
+
+```{r, warning = FALSE, results = 'hide'}
+#NYT KEY HIDDEN
+# KEY <- "#######"
+
+#Creates a dataframe when keyword is given
+keywordDF <- function(keyword){
+  #paste together url
+  url <- paste0("https://api.nytimes.com/svc/search/v2/articlesearch.json?q=", keyword,"&api-key=",KEY, sep="")
+  
+  fromJSON(url, flatten = T) %>% 
+    data.frame() %>% 
+    select(response.docs.abstract, response.docs.web_url)%>%
+    rename("Abstract" = response.docs.abstract, "Link"= response.docs.web_url)
+  }
+  
+# User Interface
+ui <- fluidPage(
+  titlePanel("New York Times Articles"),#Title of the Shiny APP
+  sidebarLayout(
+    #Left side for user input and button
+        sidebarPanel(("To access NYT Articles:"), 
+                     textInput("keyword", "Enter one keyword:",""),
+                     actionButton("search", "Lets GO!")),
+        #Main Panel for Dataframe output
+        mainPanel(
+          h1("NYT Article Abstracts and Links"),
+          DT::dataTableOutput("dataframe")
+        )
+    )
+)
+
+#Server
+server <- function(input, output) {
+  #Define a function that takes in the user input and calls the function defined above on the keyword - When the button is pressed
+  articles <- reactive({
+    input$search
+    
+    keyword <- isolate(input$keyword)
+    
+    keywordDF(keyword)
+    })
+    #Render a datatable from the datafram output
+    output$dataframe <- renderDT(articles())
+
+}
+
+# Run the Shiny APP (commented out for Rmd Presentation)
+#shinyApp(ui = ui, server = server)
+```
+
+I chose this approach because I have made similar apps in javascript, [Click here to view my javascript version of this App](https://msqcompsci.github.io/GifsnNewsApiApp/), and this week we have been thinking about our users, user interfaces and user experience when reading and using our tools.
